@@ -1,0 +1,285 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Emergency Evacuation Mode
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.emergency-page {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+/* Trigger section */
+.evac-trigger-section {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.evac-trigger-btn {
+  padding: 18px 40px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border: 2px solid rgba(239, 68, 68, 0.4);
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.evac-trigger-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 50px rgba(239, 68, 68, 0.4);
+}
+
+.evac-trigger-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 16px;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+/* Active evacuation panel */
+.evac-active-banner {
+  padding: 16px 24px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+  animation: emergencyPulse 2s ease-in-out infinite;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@keyframes emergencyPulse {
+  0%, 100% { border-color: rgba(239, 68, 68, 0.3); }
+  50% { border-color: rgba(239, 68, 68, 0.6); }
+}
+
+.evac-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.evac-banner-icon {
+  font-size: 28px;
+  animation: emergencyBlink 1s ease-in-out infinite;
+}
+
+@keyframes emergencyBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.evac-banner-text h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-rose);
+}
+
+.evac-banner-text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.evac-cancel-btn {
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+.evac-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Stats row */
+.evac-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.evac-stat {
+  padding: 16px;
+  text-align: center;
+}
+
+.evac-stat .stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.evac-stat .stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Zone assignment grid */
+.evac-zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.evac-zone-card {
+  padding: 16px 18px;
+  border-left: 3px solid var(--accent-rose);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evac-zone-info h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.evac-zone-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.evac-zone-gate {
+  text-align: right;
+}
+
+.evac-gate-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-amber);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.evac-gate-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+/* Gate summary */
+.evac-gate-summary {
+  margin-bottom: 20px;
+}
+
+.evac-gate-summary h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.evac-gate-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.evac-gate-bar:last-child {
+  border-bottom: none;
+}
+
+.evac-gate-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.evac-gate-bar-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.evac-gate-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent-amber), var(--accent-rose));
+  transition: width var(--transition-slow);
+}
+
+.evac-gate-people {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  width: 100px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* General instructions */
+.evac-instructions {
+  padding: 20px;
+}
+
+.evac-instructions h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-rose);
+  margin-bottom: 12px;
+}
+
+.evac-instructions ol {
+  list-style: none;
+  counter-reset: instrCount;
+  padding: 0;
+}
+
+.evac-instructions li {
+  counter-increment: instrCount;
+  padding: 8px 0 8px 32px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  position: relative;
+  line-height: 1.5;
+}
+
+.evac-instructions li::before {
+  content: counter(instrCount);
+  position: absolute;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-rose);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,0 +1,263 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Crowd Heatmap — Visual zone density map
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.heatmap-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+/* ── Stadium Visual Map ─────────────────────────────────────────────────── */
+
+.stadium-map {
+  padding: 24px;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+
+.stadium-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.stadium-map-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stadium-map-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* Stadium SVG layout */
+.stadium-visual {
+  flex: 1;
+  display: grid;
+  grid-template-areas:
+    ".      north    ."
+    "west   field  east"
+    ".      south    .";
+  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-rows: 1fr 2fr 1fr;
+  gap: 10px;
+  padding: 16px;
+  position: relative;
+}
+
+.stadium-visual::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 55%;
+  height: 60%;
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.zone-block {
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  border: 1px solid var(--border-subtle);
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  gap: 4px;
+}
+
+.zone-block:hover {
+  transform: scale(1.03);
+  z-index: 2;
+  border-color: var(--border-medium);
+}
+
+.zone-block.north { grid-area: north; }
+.zone-block.south { grid-area: south; }
+.zone-block.east { grid-area: east; }
+.zone-block.west { grid-area: west; }
+
+.zone-block .zone-block-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  z-index: 1;
+}
+
+.zone-block .zone-block-pct {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  z-index: 1;
+  font-family: var(--font-mono);
+}
+
+.zone-block .zone-block-count {
+  font-size: 10px;
+  color: var(--text-secondary);
+  z-index: 1;
+}
+
+.field-center {
+  grid-area: field;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+/* ── Side Panel ─────────────────────────────────────────────────────────── */
+
+.heatmap-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.facility-zones-card {
+  padding: 20px;
+}
+
+.facility-zones-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+
+.facility-zone-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.facility-zone-item:last-child {
+  border-bottom: none;
+}
+
+.facility-zone-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.facility-zone-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.facility-zone-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.facility-zone-density {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+/* Prediction panel */
+.prediction-card {
+  padding: 20px;
+}
+
+.prediction-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+
+.prediction-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.prediction-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  width: 50px;
+  flex-shrink: 0;
+}
+
+.prediction-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.prediction-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width var(--transition-slow);
+}
+
+.prediction-value {
+  font-size: 12px;
+  font-weight: 600;
+  width: 40px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .heatmap-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .stadium-visual {
+    grid-template-columns: 1fr 1.5fr 1fr;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .zone-block .zone-block-pct {
+    font-size: 16px;
+  }
+}

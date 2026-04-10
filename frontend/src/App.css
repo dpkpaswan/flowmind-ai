@@ -1,0 +1,5 @@
+/* App-level styles are minimal — component CSS handles almost everything */
+
+.app {
+  min-height: 100vh;
+}
