@@ -2,7 +2,9 @@
  * FlowMind AI — Application Constants
  */
 
-export const API_BASE = 'http://localhost:8000';
+// In production, set VITE_API_URL to your Cloud Run backend URL
+// In dev, defaults to localhost:8000
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const POLL_INTERVAL = 15000; // 15 seconds
 
