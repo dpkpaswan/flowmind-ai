@@ -4,14 +4,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-ENV VITE_API_URL=https://flowmind-backend-817820730147.us-central1.run.app
+ARG VITE_API_URL
+ARG VITE_GOOGLE_MAPS_API_KEY
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 RUN npm run build
-
 # Production stage - serve with nginx
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# SPA routing - redirect all requests to index.html
 RUN echo 'server { \
     listen 8080; \
     location / { \
@@ -20,6 +20,5 @@ RUN echo 'server { \
         try_files $uri $uri/ /index.html; \
     } \
 }' > /etc/nginx/conf.d/default.conf
-
 EXPOSE 8080
 CMD ["nginx", "-g", "daemon off;"]
