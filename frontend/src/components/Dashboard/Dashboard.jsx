@@ -1,6 +1,6 @@
 /**
  * FlowMind AI — Dashboard Component
- * Main overview with stats cards and zone density grid.
+ * WCAG 2.1 AA: sections with headings, aria-live on dynamic data, aria-label on stat cards.
  */
 
 import React from 'react';
@@ -16,8 +16,8 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loading-spinner" />
+      <div className="loading-container" role="status" aria-label="Loading stadium data">
+        <div className="loading-spinner" aria-hidden="true" />
         <div className="loading-text">Loading stadium data...</div>
       </div>
     );
@@ -25,7 +25,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="error-container">
+      <div className="error-container" role="alert">
         <div className="error-message">Failed to load data: {error}</div>
       </div>
     );
@@ -38,7 +38,6 @@ export default function Dashboard() {
   const busiest = sortedZones[0];
   const quietest = sortedZones[sortedZones.length - 1];
 
-  // Calculate average wait times by type
   const facilities = waitData?.facilities || [];
   const avgWait = (type) => {
     const matching = facilities.filter(f => f.facility_type === type);
@@ -46,83 +45,87 @@ export default function Dashboard() {
     return (matching.reduce((sum, f) => sum + f.current_wait_minutes, 0) / matching.length).toFixed(1);
   };
 
+  const criticalAlerts = (alertsData?.alerts || []).filter(a => a.severity === 'critical').length;
+
   return (
     <div className="animate-fade-in">
       {/* Stats Row */}
-      <div className="stats-row stagger-children">
-        <div className="glass-card stat-card accent-indigo">
-          <div className="stat-label">Total Attendance</div>
-          <div className="stat-value">{crowd.current_attendance?.toLocaleString()}</div>
-          <div className="stat-sub">
-            of {crowd.total_capacity?.toLocaleString()} capacity
-          </div>
-        </div>
+      <section aria-label="Key statistics">
+        <div className="stats-row stagger-children" aria-live="polite" aria-atomic="false">
+          <article className="glass-card stat-card accent-indigo" aria-label={`Total attendance: ${crowd.current_attendance?.toLocaleString()} of ${crowd.total_capacity?.toLocaleString()} capacity`}>
+            <div className="stat-label">Total Attendance</div>
+            <div className="stat-value" aria-hidden="true">{crowd.current_attendance?.toLocaleString()}</div>
+            <div className="stat-sub" aria-hidden="true">of {crowd.total_capacity?.toLocaleString()} capacity</div>
+          </article>
 
-        <div className="glass-card stat-card accent-cyan">
-          <div className="stat-label">Overall Density</div>
-          <div className="stat-value">{(crowd.overall_density * 100).toFixed(0)}%</div>
-          <div className="stat-sub">
-            {crowd.overall_density > 0.7 ? (
-              <span className="trend-up">&#9650; High load</span>
-            ) : (
-              <span className="trend-down">&#9660; Normal</span>
-            )}
-          </div>
-        </div>
+          <article className="glass-card stat-card accent-cyan" aria-label={`Overall density: ${(crowd.overall_density * 100).toFixed(0)}%`}>
+            <div className="stat-label">Overall Density</div>
+            <div className="stat-value" aria-hidden="true">{(crowd.overall_density * 100).toFixed(0)}%</div>
+            <div className="stat-sub" aria-hidden="true">
+              {crowd.overall_density > 0.7 ? (
+                <span className="trend-up">&#9650; High load</span>
+              ) : (
+                <span className="trend-down">&#9660; Normal</span>
+              )}
+            </div>
+          </article>
 
-        <div className="glass-card stat-card accent-emerald">
-          <div className="stat-label">Avg Food Wait</div>
-          <div className="stat-value">{avgWait('food_stall')}m</div>
-          <div className="stat-sub">across {facilities.filter(f => f.facility_type === 'food_stall').length} stalls</div>
-        </div>
+          <article className="glass-card stat-card accent-emerald" aria-label={`Average food wait: ${avgWait('food_stall')} minutes`}>
+            <div className="stat-label">Avg Food Wait</div>
+            <div className="stat-value" aria-hidden="true">{avgWait('food_stall')}m</div>
+            <div className="stat-sub" aria-hidden="true">across {facilities.filter(f => f.facility_type === 'food_stall').length} stalls</div>
+          </article>
 
-        <div className="glass-card stat-card accent-amber">
-          <div className="stat-label">Active Alerts</div>
-          <div className="stat-value">{alertsData?.count || 0}</div>
-          <div className="stat-sub">
-            {(alertsData?.alerts || []).filter(a => a.severity === 'critical').length} critical
-          </div>
+          <article className="glass-card stat-card accent-amber" aria-label={`Active alerts: ${alertsData?.count || 0} total, ${criticalAlerts} critical`}>
+            <div className="stat-label">Active Alerts</div>
+            <div className="stat-value" aria-hidden="true">{alertsData?.count || 0}</div>
+            <div className="stat-sub" aria-hidden="true">{criticalAlerts} critical</div>
+          </article>
         </div>
-      </div>
+      </section>
 
       {/* Zone Grid */}
-      <div className="section-header">
-        <div className="section-title">Zone Overview</div>
-        <span className="section-badge">{zones.length} zones</span>
-      </div>
+      <section aria-label="Zone overview">
+        <div className="section-header">
+          <h2 className="section-title">Zone Overview</h2>
+          <span className="section-badge" aria-label={`${zones.length} zones`}>{zones.length} zones</span>
+        </div>
 
-      <div className="zone-grid stagger-children">
-        {sortedZones.map((zone) => (
-          <ZoneCard key={zone.zone_id} zone={zone} />
-        ))}
-      </div>
+        <div className="zone-grid stagger-children" aria-live="polite" aria-atomic="false">
+          {sortedZones.map((zone) => (
+            <ZoneCard key={zone.zone_id} zone={zone} />
+          ))}
+        </div>
+      </section>
 
       {/* Quick Summary */}
-      <div className="section-header">
-        <div className="section-title">Quick Insights</div>
-      </div>
-      <div className="stats-row stagger-children">
-        <div className="glass-card stat-card accent-cyan">
-          <div className="stat-label">Busiest Zone</div>
-          <div className="stat-value" style={{ fontSize: '20px' }}>{busiest?.name}</div>
-          <div className="stat-sub">{(busiest?.current_density * 100).toFixed(0)}% capacity</div>
+      <section aria-label="Quick insights">
+        <div className="section-header">
+          <h2 className="section-title">Quick Insights</h2>
         </div>
-        <div className="glass-card stat-card accent-emerald">
-          <div className="stat-label">Quietest Zone</div>
-          <div className="stat-value" style={{ fontSize: '20px' }}>{quietest?.name}</div>
-          <div className="stat-sub">{(quietest?.current_density * 100).toFixed(0)}% capacity</div>
+        <div className="stats-row stagger-children" aria-live="polite" aria-atomic="false">
+          <article className="glass-card stat-card accent-cyan" aria-label={`Busiest zone: ${busiest?.name} at ${(busiest?.current_density * 100).toFixed(0)}% capacity`}>
+            <div className="stat-label">Busiest Zone</div>
+            <div className="stat-value" style={{ fontSize: '20px' }} aria-hidden="true">{busiest?.name}</div>
+            <div className="stat-sub" aria-hidden="true">{(busiest?.current_density * 100).toFixed(0)}% capacity</div>
+          </article>
+          <article className="glass-card stat-card accent-emerald" aria-label={`Quietest zone: ${quietest?.name} at ${(quietest?.current_density * 100).toFixed(0)}% capacity`}>
+            <div className="stat-label">Quietest Zone</div>
+            <div className="stat-value" style={{ fontSize: '20px' }} aria-hidden="true">{quietest?.name}</div>
+            <div className="stat-sub" aria-hidden="true">{(quietest?.current_density * 100).toFixed(0)}% capacity</div>
+          </article>
+          <article className="glass-card stat-card accent-indigo" aria-label={`Average restroom wait: ${avgWait('restroom')} minutes`}>
+            <div className="stat-label">Avg Restroom Wait</div>
+            <div className="stat-value" aria-hidden="true">{avgWait('restroom')}m</div>
+            <div className="stat-sub" aria-hidden="true">across {facilities.filter(f => f.facility_type === 'restroom').length} restrooms</div>
+          </article>
+          <article className="glass-card stat-card accent-amber" aria-label={`Average gate wait: ${avgWait('gate')} minutes`}>
+            <div className="stat-label">Avg Gate Wait</div>
+            <div className="stat-value" aria-hidden="true">{avgWait('gate')}m</div>
+            <div className="stat-sub" aria-hidden="true">across {facilities.filter(f => f.facility_type === 'gate').length} gates</div>
+          </article>
         </div>
-        <div className="glass-card stat-card accent-indigo">
-          <div className="stat-label">Avg Restroom Wait</div>
-          <div className="stat-value">{avgWait('restroom')}m</div>
-          <div className="stat-sub">across {facilities.filter(f => f.facility_type === 'restroom').length} restrooms</div>
-        </div>
-        <div className="glass-card stat-card accent-amber">
-          <div className="stat-label">Avg Gate Wait</div>
-          <div className="stat-value">{avgWait('gate')}m</div>
-          <div className="stat-sub">across {facilities.filter(f => f.facility_type === 'gate').length} gates</div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -132,39 +135,53 @@ function ZoneCard({ zone }) {
   const densityPct = (zone.current_density * 100).toFixed(0);
   const predictedPct = (zone.predicted_density * 100).toFixed(0);
   const trend = zone.predicted_density > zone.current_density ? 'up' : 'down';
+  const trendLabel = trend === 'up' ? 'increasing' : 'decreasing';
+  const statusText = STATUS_LABELS[zone.status] || zone.status;
 
   return (
-    <div className="glass-card zone-card">
+    <article
+      className="glass-card zone-card"
+      tabIndex={0}
+      aria-label={`${zone.name}: ${densityPct}% full, status ${statusText}, predicted ${predictedPct}% in ${zone.prediction_minutes} minutes`}
+    >
       <div className="zone-card-header">
         <span className="zone-name">{zone.name}</span>
-        <span className={`zone-status-badge ${zone.status}`}>
-          {STATUS_LABELS[zone.status]}
+        <span className={`zone-status-badge ${zone.status}`} aria-label={`Status: ${statusText}`}>
+          {statusText}
         </span>
       </div>
 
       <div className="density-bar-container">
         <div className="density-bar-labels">
           <span className="density-current">{densityPct}% filled</span>
-          <span className="density-predicted">
-            {trend === 'up' ? '\u2191' : '\u2193'} {predictedPct}% in {zone.prediction_minutes}m
+          <span className="density-predicted" aria-label={`Predicted ${predictedPct}% in ${zone.prediction_minutes} minutes, ${trendLabel}`}>
+            {trend === 'up' ? '↑' : '↓'} {predictedPct}% in {zone.prediction_minutes}m
           </span>
         </div>
-        <div className="density-bar-track">
+        <div
+          className="density-bar-track"
+          role="progressbar"
+          aria-valuenow={Number(densityPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${zone.name} density: ${densityPct}%`}
+        >
           <div
             className={`density-bar-fill ${zone.status}`}
             style={{ width: `${densityPct}%` }}
           />
           <div
             className="density-bar-predicted"
-            style={{ left: `${Math.min(predictedPct, 100)}%` }}
+            style={{ left: `${Math.min(Number(predictedPct), 100)}%` }}
+            aria-hidden="true"
           />
         </div>
       </div>
 
-      <div className="zone-meta">
+      <div className="zone-meta" aria-hidden="true">
         <span>{zone.current_count?.toLocaleString()} people</span>
         <span>Cap: {zone.capacity?.toLocaleString()}</span>
       </div>
-    </div>
+    </article>
   );
 }

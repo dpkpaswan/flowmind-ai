@@ -22,6 +22,10 @@ frontend/.vite/
 .env.local
 .env.*.local
 backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/.env.*.local
 
 # ── IDE ─────────────────────────────────────
 .vscode/

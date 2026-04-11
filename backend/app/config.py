@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
+    # ── Firebase Realtime Database ────────────────────────
+    FIREBASE_DATABASE_URL: str = ""
+
+    # ── Google Cloud ──────────────────────────────────────
+    GOOGLE_CLOUD_PROJECT: str = ""
+
+    # ── Google Maps (used by frontend, stored here for reference) ────────────
+    GOOGLE_MAPS_API_KEY: str = ""
+
     # ── Stadium Config ───────────────────────────────────
     STADIUM_NAME: str = "MetaStadium Arena"
     STADIUM_CAPACITY: int = 60000
@@ -40,6 +49,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # silently ignore unknown env vars (e.g. GOOGLE_MAPS_API_KEY)
 
 
 # Singleton settings instance

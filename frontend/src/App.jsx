@@ -36,25 +36,23 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard key={refreshKey} />;
-      case 'heatmap':
-        return <CrowdHeatmap key={refreshKey} />;
-      case 'wait-times':
-        return <WaitTimes key={refreshKey} />;
-      case 'alerts':
-        return <SmartAlerts key={refreshKey} />;
-      case 'chat':
-        return <AIChat />;
-      case 'emergency':
-        return <EmergencyMode key={refreshKey} />;
-      default:
-        return <Dashboard key={refreshKey} />;
+      case 'dashboard':   return <Dashboard key={refreshKey} />;
+      case 'heatmap':     return <CrowdHeatmap key={refreshKey} />;
+      case 'wait-times':  return <WaitTimes key={refreshKey} />;
+      case 'alerts':      return <SmartAlerts key={refreshKey} />;
+      case 'chat':        return <AIChat />;
+      case 'emergency':   return <EmergencyMode key={refreshKey} />;
+      default:            return <Dashboard key={refreshKey} />;
     }
   };
 
   return (
     <div className="layout">
+      {/* Skip navigation link — visible only on keyboard focus */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -62,13 +60,13 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="main-content">
+      <main className="main-content" id="main-content" tabIndex={-1}>
         <Header
           title={TAB_TITLES[activeTab]}
           onMenuClick={() => setSidebarOpen(true)}
           onRefresh={handleRefresh}
         />
-        <div className="page-content">
+        <div className="page-content" role="region" aria-label={TAB_TITLES[activeTab]}>
           {/* Simulation Controls — visible on all tabs */}
           <SimulationControls />
           {renderContent()}

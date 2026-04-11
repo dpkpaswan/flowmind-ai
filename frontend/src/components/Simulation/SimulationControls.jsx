@@ -1,6 +1,7 @@
 /**
  * FlowMind AI — Simulation Controls Component
- * Play/pause/speed controls to fast-forward through a full match event.
+ * WCAG 2.1 AA: aria-live on status badge, aria-label on buttons/select,
+ * progressbar role on timeline, aria-live on match minute.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -13,7 +14,7 @@ import {
 import './SimulationControls.css';
 
 const SPEED_OPTIONS = [
-  { value: 5, label: '5x' },
+  { value: 5,  label: '5x' },
   { value: 10, label: '10x (Demo)' },
   { value: 20, label: '20x (Fast)' },
   { value: 30, label: '30x' },
@@ -28,44 +29,27 @@ export default function SimulationControls() {
     try {
       const data = await fetchSimulationStatus();
       setStatus(data);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 1000); // Poll every second for smooth updates
+    const interval = setInterval(refresh, 1000);
     return () => clearInterval(interval);
   }, [refresh]);
 
   const handleStart = async () => {
-    try {
-      const data = await startSimulation(speed);
-      setStatus(data);
-    } catch {
-      // ignore
-    }
+    try { setStatus(await startSimulation(speed)); } catch { /* ignore */ }
   };
 
   const handleStop = async () => {
-    try {
-      const data = await stopSimulation();
-      setStatus(data);
-    } catch {
-      // ignore
-    }
+    try { setStatus(await stopSimulation()); } catch { /* ignore */ }
   };
 
   const handleSpeedChange = async (newSpeed) => {
     setSpeed(newSpeed);
     if (status?.running) {
-      try {
-        const data = await setSimulationSpeed(newSpeed);
-        setStatus(data);
-      } catch {
-        // ignore
-      }
+      try { setStatus(await setSimulationSpeed(newSpeed)); } catch { /* ignore */ }
     }
   };
 
@@ -74,33 +58,54 @@ export default function SimulationControls() {
   const isRunning = status.running;
   const isCompleted = status.phase === 'completed';
   const badgeClass = isRunning ? 'running' : isCompleted ? 'completed' : 'idle';
-  const badgeText = isRunning ? 'LIVE' : isCompleted ? 'COMPLETED' : 'STANDBY';
+  const badgeText  = isRunning ? 'LIVE'    : isCompleted ? 'COMPLETED' : 'STANDBY';
+  const progressPct = status.progress_pct || 0;
 
   return (
-    <div className="glass-card sim-panel">
+    <section className="glass-card sim-panel" aria-label="Event simulation controls">
       {/* Header */}
       <div className="sim-header">
         <div className="sim-title">
-          <h3>{'\uD83C\uDFAC'} Event Simulation</h3>
-          <span className={`sim-live-badge ${badgeClass}`}>{badgeText}</span>
+          <h2>🎬 Event Simulation</h2>
+          <span
+            className={`sim-live-badge ${badgeClass}`}
+            role="status"
+            aria-live="polite"
+            aria-label={`Simulation status: ${badgeText}`}
+          >
+            {badgeText}
+          </span>
         </div>
-        <div className="sim-controls">
+
+        <div className="sim-controls" role="group" aria-label="Simulation speed and playback">
+          <label htmlFor="sim-speed" className="visually-hidden">Simulation speed</label>
           <select
+            id="sim-speed"
             className="sim-speed-select"
             value={speed}
             onChange={(e) => handleSpeedChange(Number(e.target.value))}
+            aria-label={`Simulation speed: currently ${speed}x`}
           >
             {SPEED_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+
           {!isRunning ? (
-            <button className="sim-btn play" onClick={handleStart}>
-              {'\u25B6'} Play Event
+            <button
+              className="sim-btn play"
+              onClick={handleStart}
+              aria-label="Start event simulation"
+            >
+              ▶ Play Event
             </button>
           ) : (
-            <button className="sim-btn stop" onClick={handleStop}>
-              {'\u25A0'} Stop
+            <button
+              className="sim-btn stop"
+              onClick={handleStop}
+              aria-label="Stop event simulation"
+            >
+              ■ Stop
             </button>
           )}
         </div>
@@ -108,13 +113,21 @@ export default function SimulationControls() {
 
       {/* Timeline Progress */}
       <div className="sim-timeline">
-        <div className="sim-progress-bar">
+        <div
+          className="sim-progress-bar"
+          role="progressbar"
+          aria-valuenow={Math.round(progressPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Event progress: ${Math.round(progressPct)}%`}
+        >
           <div
             className="sim-progress-fill"
-            style={{ width: `${status.progress_pct || 0}%` }}
+            style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="sim-phases">
+
+        <div className="sim-phases" aria-hidden="true">
           {(status.phases || []).map((phase) => (
             <div
               key={phase.phase}
@@ -127,19 +140,25 @@ export default function SimulationControls() {
       </div>
 
       {/* Info Row */}
-      <div className="sim-info">
-        <div className="sim-info-item">
-          Match Minute: <span className="sim-minute">{status.event_minute}'{' '}</span>
+      <div
+        className="sim-info"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label={`Match minute ${status.event_minute} of ${status.total_minutes}. Phase: ${status.phase_label}. ${isRunning ? `Speed: ${status.speed}x` : ''}`}
+      >
+        <div className="sim-info-item" aria-hidden="true">
+          Match Minute:
+          <span className="sim-minute">{status.event_minute}'{' '}</span>
           / {status.total_minutes}'
         </div>
-        <span className="sim-phase-name">{status.phase_label}</span>
-        <span className="sim-description">{status.phase_description}</span>
+        <span className="sim-phase-name" aria-hidden="true">{status.phase_label}</span>
+        <span className="sim-description" aria-hidden="true">{status.phase_description}</span>
         {isRunning && (
-          <div className="sim-info-item">
+          <div className="sim-info-item" aria-hidden="true">
             Speed: <strong>{status.speed}x</strong>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

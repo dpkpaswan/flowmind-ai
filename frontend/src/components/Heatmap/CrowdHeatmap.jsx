@@ -1,13 +1,19 @@
 /**
  * FlowMind AI — Crowd Heatmap Component
  * Visual stadium zone map with density visualization and predictions.
+ * Uses Google Maps heatmap overlay when API key is available,
+ * falls back to the original CSS-grid stadium visual otherwise.
  */
 
 import React, { useState } from 'react';
 import { usePolling } from '../../hooks/usePolling';
-import { fetchCrowdData, fetchCrowdPredictions } from '../../services/api';
+import { fetchCrowdData, fetchCrowdPredictions, fetchHeatmapData } from '../../services/api';
 import { POLL_INTERVAL, STATUS_COLORS } from '../../utils/constants';
+import GoogleMap from './GoogleMap';
 import './CrowdHeatmap.css';
+
+// Check if Google Maps API key is configured
+const GOOGLE_MAPS_ENABLED = !!import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 // Map zone_id to grid zone position
 const ZONE_POSITION = {
@@ -30,6 +36,10 @@ function densityColor(density) {
 export default function CrowdHeatmap() {
   const { data: crowd, loading, error } = usePolling(fetchCrowdData, POLL_INTERVAL);
   const { data: predData } = usePolling(fetchCrowdPredictions, POLL_INTERVAL);
+  const { data: heatmapData } = usePolling(
+    GOOGLE_MAPS_ENABLED ? fetchHeatmapData : null,
+    POLL_INTERVAL,
+  );
   const [selectedZone, setSelectedZone] = useState(null);
 
   if (loading) {
@@ -51,6 +61,7 @@ export default function CrowdHeatmap() {
 
   const zones = crowd.zones || [];
   const predictions = predData?.predictions || [];
+  const heatmapPoints = heatmapData?.points || [];
 
   const mainZones = zones.filter(z => ZONE_POSITION[z.zone_id]);
   const extraZones = zones.filter(z => EXTRA_ZONES.includes(z.zone_id));
@@ -62,10 +73,12 @@ export default function CrowdHeatmap() {
 
   return (
     <div className="heatmap-container">
-      {/* Stadium Visual Map */}
+      {/* Stadium Visual Map — Google Maps or CSS fallback */}
       <div className="glass-card stadium-map">
         <div className="stadium-map-header">
-          <div className="stadium-map-title">Stadium Density Map</div>
+          <div className="stadium-map-title">
+            {GOOGLE_MAPS_ENABLED ? 'Live Crowd Heatmap' : 'Stadium Density Map'}
+          </div>
           <div className="stadium-map-legend">
             <div className="legend-item">
               <div className="legend-dot" style={{ background: STATUS_COLORS.low }} />
@@ -86,34 +99,41 @@ export default function CrowdHeatmap() {
           </div>
         </div>
 
-        <div className="stadium-visual">
-          {mainZones.map((zone) => {
-            const color = densityColor(zone.current_density);
-            const pos = ZONE_POSITION[zone.zone_id];
-            return (
-              <div
-                key={zone.zone_id}
-                className={`zone-block ${pos}`}
-                style={{
-                  background: `${color}18`,
-                  borderColor: `${color}40`,
-                  boxShadow: `inset 0 0 30px ${color}12`,
-                }}
-                onClick={() => setSelectedZone(zone.zone_id)}
-              >
-                <span className="zone-block-name">{zone.name}</span>
-                <span className="zone-block-pct" style={{ color }}>
-                  {(zone.current_density * 100).toFixed(0)}%
-                </span>
-                <span className="zone-block-count">
-                  {zone.current_count?.toLocaleString()} people
-                </span>
-              </div>
-            );
-          })}
-
-          <div className="field-center">PLAYING FIELD</div>
-        </div>
+        {GOOGLE_MAPS_ENABLED ? (
+          /* ── Google Maps Heatmap ────────────────────────────── */
+          <div className="google-map-wrapper">
+            <GoogleMap points={heatmapPoints} />
+          </div>
+        ) : (
+          /* ── CSS Grid Stadium Fallback ─────────────────────── */
+          <div className="stadium-visual">
+            {mainZones.map((zone) => {
+              const color = densityColor(zone.current_density);
+              const pos = ZONE_POSITION[zone.zone_id];
+              return (
+                <div
+                  key={zone.zone_id}
+                  className={`zone-block ${pos}`}
+                  style={{
+                    background: `${color}18`,
+                    borderColor: `${color}40`,
+                    boxShadow: `inset 0 0 30px ${color}12`,
+                  }}
+                  onClick={() => setSelectedZone(zone.zone_id)}
+                >
+                  <span className="zone-block-name">{zone.name}</span>
+                  <span className="zone-block-pct" style={{ color }}>
+                    {(zone.current_density * 100).toFixed(0)}%
+                  </span>
+                  <span className="zone-block-count">
+                    {zone.current_count?.toLocaleString()} people
+                  </span>
+                </div>
+              );
+            })}
+            <div className="field-center">PLAYING FIELD</div>
+          </div>
+        )}
       </div>
 
       {/* Side Panel */}

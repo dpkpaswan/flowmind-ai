@@ -1,6 +1,7 @@
 /**
  * FlowMind AI — AI Chat Component
- * Decision-focused conversational interface with quick actions and context display.
+ * WCAG 2.1 AA: role="log" on message feed, aria-live="assertive" for new AI messages,
+ * labelled input/button, aria-busy on typing state.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -8,25 +9,25 @@ import { sendChatMessage } from '../../services/api';
 import './AIChat.css';
 
 const QUICK_ACTIONS = [
-  { icon: '\uD83C\uDF54', text: 'Where should I get food with the shortest wait?' },
-  { icon: '\uD83D\uDEBB', text: 'Which restroom has the shortest line?' },
-  { icon: '\uD83D\uDC65', text: 'Which area is least crowded right now?' },
-  { icon: '\uD83D\uDEAA', text: 'What\'s the fastest exit right now?' },
-  { icon: '\u231A', text: 'Should I leave now or wait?' },
-  { icon: '\uD83D\uDDFA\uFE0F', text: 'How do I get to the North Stand?' },
+  { icon: '🍔', text: 'Where should I get food with the shortest wait?' },
+  { icon: '🚻', text: 'Which restroom has the shortest line?' },
+  { icon: '👥', text: 'Which area is least crowded right now?' },
+  { icon: '🚪', text: "What's the fastest exit right now?" },
+  { icon: '⌚', text: 'Should I leave now or wait?' },
+  { icon: '🗺️', text: 'How do I get to the North Stand?' },
 ];
 
 const LANGUAGES = [
-  { code: 'en', label: '\uD83C\uDDEC\uD83C\uDDE7 English' },
-  { code: 'hi', label: '\uD83C\uDDEE\uD83C\uDDF3 Hindi' },
-  { code: 'es', label: '\uD83C\uDDEA\uD83C\uDDF8 Spanish' },
-  { code: 'fr', label: '\uD83C\uDDEB\uD83C\uDDF7 French' },
-  { code: 'de', label: '\uD83C\uDDE9\uD83C\uDDEA German' },
-  { code: 'pt', label: '\uD83C\uDDE7\uD83C\uDDF7 Portuguese' },
-  { code: 'ar', label: '\uD83C\uDDF8\uD83C\uDDE6 Arabic' },
-  { code: 'ja', label: '\uD83C\uDDEF\uD83C\uDDF5 Japanese' },
-  { code: 'zh', label: '\uD83C\uDDE8\uD83C\uDDF3 Chinese' },
-  { code: 'ko', label: '\uD83C\uDDF0\uD83C\uDDF7 Korean' },
+  { code: 'en', label: '🇬🇧 English' },
+  { code: 'hi', label: '🇮🇳 Hindi' },
+  { code: 'es', label: '🇪🇸 Spanish' },
+  { code: 'fr', label: '🇫🇷 French' },
+  { code: 'de', label: '🇩🇪 German' },
+  { code: 'pt', label: '🇧🇷 Portuguese' },
+  { code: 'ar', label: '🇸🇦 Arabic' },
+  { code: 'ja', label: '🇯🇵 Japanese' },
+  { code: 'zh', label: '🇨🇳 Chinese' },
+  { code: 'ko', label: '🇰🇷 Korean' },
 ];
 
 export default function AIChat() {
@@ -49,7 +50,6 @@ export default function AIChat() {
     const messageText = text || input.trim();
     if (!messageText || isTyping) return;
 
-    // Add user message
     const userMsg = {
       id: Date.now(),
       role: 'user',
@@ -62,7 +62,6 @@ export default function AIChat() {
 
     try {
       const response = await sendChatMessage(messageText, null, language);
-
       const assistantMsg = {
         id: Date.now() + 1,
         role: 'assistant',
@@ -73,14 +72,13 @@ export default function AIChat() {
         timestamp: response.timestamp,
       };
       setMessages(prev => [...prev, assistantMsg]);
-    } catch (err) {
-      const errorMsg = {
+    } catch {
+      setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
         content: 'Sorry, I\'m having trouble connecting to the stadium systems. Please try again in a moment.',
         timestamp: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      }]);
     } finally {
       setIsTyping(false);
     }
@@ -93,23 +91,29 @@ export default function AIChat() {
     }
   };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
     <div className="chat-container">
       {/* Main Chat */}
-      <div className="glass-card chat-main">
-        <div className="chat-messages">
+      <section className="glass-card chat-main" aria-label="AI chat conversation">
+        {/* Message feed */}
+        <div
+          className="chat-messages"
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-relevant="additions"
+          aria-label="Conversation messages"
+          tabIndex={0}
+        >
           {messages.length === 0 && (
-            <div className="chat-welcome">
-              <span className="chat-welcome-icon">{'\uD83E\uDD16'}</span>
-              <h3>FlowMind AI Assistant</h3>
+            <div className="chat-welcome" aria-live="polite">
+              <span className="chat-welcome-icon" aria-hidden="true">🤖</span>
+              <h2>FlowMind AI Assistant</h2>
               <p>
                 Ask me anything about the stadium — crowd conditions, wait times,
                 best routes, food options, or exit strategies. I have real-time data
@@ -119,33 +123,46 @@ export default function AIChat() {
           )}
 
           {messages.map((msg) => (
-            <div key={msg.id} className={`chat-message ${msg.role}`}>
-              <div className="chat-avatar">
+            <div
+              key={msg.id}
+              className={`chat-message ${msg.role}`}
+              aria-label={`${msg.role === 'user' ? 'You' : 'FlowMind AI'} at ${formatTime(msg.timestamp)}: ${msg.content}`}
+            >
+              <div className="chat-avatar" aria-hidden="true">
                 {msg.role === 'user' ? 'U' : 'AI'}
               </div>
               <div>
                 <div className="chat-bubble">
                   {msg.content}
                   {msg.action && (
-                    <div className="chat-action">{msg.action}</div>
+                    <div className="chat-action" aria-label={`Recommended action: ${msg.action}`}>
+                      {msg.action}
+                    </div>
                   )}
                   {msg.zones && msg.zones.length > 0 && (
-                    <div className="chat-zones">
+                    <div className="chat-zones" aria-label={`Related zones: ${msg.zones.join(', ')}`}>
                       {msg.zones.map((zone, i) => (
                         <span key={i} className="chat-zone-tag">{zone}</span>
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="chat-timestamp">{formatTime(msg.timestamp)}</div>
+                <div className="chat-timestamp" aria-hidden="true">
+                  <time dateTime={msg.timestamp}>{formatTime(msg.timestamp)}</time>
+                </div>
               </div>
             </div>
           ))}
 
           {isTyping && (
-            <div className="chat-message assistant">
-              <div className="chat-avatar">AI</div>
-              <div className="chat-bubble">
+            <div
+              className="chat-message assistant"
+              role="status"
+              aria-label="FlowMind AI is typing a response"
+              aria-live="assertive"
+            >
+              <div className="chat-avatar" aria-hidden="true">AI</div>
+              <div className="chat-bubble" aria-hidden="true">
                 <div className="typing-indicator">
                   <span className="typing-dot" />
                   <span className="typing-dot" />
@@ -155,11 +172,16 @@ export default function AIChat() {
             </div>
           )}
 
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} tabIndex={-1} />
         </div>
 
-        <div className="chat-input-area">
+        {/* Input area */}
+        <div className="chat-input-area" role="group" aria-label="Send a message">
+          <label htmlFor="chat-input" className="visually-hidden">
+            Message FlowMind AI
+          </label>
           <textarea
+            id="chat-input"
             ref={inputRef}
             className="chat-input"
             value={input}
@@ -168,26 +190,38 @@ export default function AIChat() {
             placeholder="Ask about crowds, wait times, exits..."
             rows={1}
             disabled={isTyping}
+            aria-disabled={isTyping}
+            aria-describedby="chat-hint"
           />
+          <span id="chat-hint" className="visually-hidden">
+            Press Enter to send, Shift+Enter for a new line
+          </span>
           <button
             className="chat-send-btn"
             onClick={() => handleSend()}
             disabled={!input.trim() || isTyping}
+            aria-label="Send message"
+            aria-busy={isTyping}
           >
             Send
           </button>
         </div>
-      </div>
+      </section>
 
       {/* Sidebar Quick Actions */}
-      <div className="chat-sidebar">
+      <aside className="chat-sidebar" aria-label="Chat options">
         {/* Language Selector */}
         <div className="glass-card quick-actions-card">
-          <h3>{"\uD83C\uDF10"} Language</h3>
+          <h2>🌐 Language</h2>
+          <label htmlFor="language-select" className="visually-hidden">
+            Select response language
+          </label>
           <select
+            id="language-select"
             className="chat-lang-select"
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
+            aria-label="Select response language"
           >
             {LANGUAGES.map((lang) => (
               <option key={lang.code} value={lang.code}>{lang.label}</option>
@@ -196,20 +230,22 @@ export default function AIChat() {
         </div>
 
         <div className="glass-card quick-actions-card">
-          <h3>Quick Questions</h3>
+          <h2>Quick Questions</h2>
           {QUICK_ACTIONS.map((action, i) => (
             <button
               key={i}
               className="quick-action-btn"
               onClick={() => handleSend(action.text)}
               disabled={isTyping}
+              aria-disabled={isTyping}
+              aria-label={action.text}
             >
-              <span className="qa-icon">{action.icon}</span>
+              <span className="qa-icon" aria-hidden="true">{action.icon}</span>
               {action.text}
             </button>
           ))}
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

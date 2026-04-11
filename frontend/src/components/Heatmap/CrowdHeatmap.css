@@ -139,6 +139,27 @@
   letter-spacing: 1px;
 }
 
+/* ── Google Maps Heatmap ───────────────────────────────────────────────── */
+
+.google-map-wrapper {
+  flex: 1;
+  min-height: 460px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.google-map-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hide Google Maps UI clutter */
+.google-map-container .gm-style-cc,
+.google-map-container .gmnoprint:not(.gm-bundled-control) {
+  display: none !important;
+}
+
 /* ── Side Panel ─────────────────────────────────────────────────────────── */
 
 .heatmap-side-panel {
