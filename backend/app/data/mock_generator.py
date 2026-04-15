@@ -40,14 +40,14 @@ ZONES = [
     {
         "zone_id": "north_stand",
         "name": "North Stand",
-        "capacity": 12000,
+        "capacity": 13000,
         "base_density": 0.55,
         "coordinates": {"lat": 19.0760, "lng": 72.8777},
     },
     {
         "zone_id": "south_stand",
         "name": "South Stand",
-        "capacity": 12000,
+        "capacity": 13000,
         "base_density": 0.60,
         "coordinates": {"lat": 19.0740, "lng": 72.8777},
     },
@@ -82,7 +82,7 @@ ZONES = [
     {
         "zone_id": "main_gate",
         "name": "Main Gate",
-        "capacity": 5000,
+        "capacity": 6000,
         "base_density": 0.45,
         "coordinates": {"lat": 19.0730, "lng": 72.8777},
     },
