@@ -1,11 +1,30 @@
+# ── Core Framework ──────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
-google-generativeai==0.8.3
 httpx==0.27.2
-firebase-admin==6.5.0
+
+# ── Google Cloud Services ───────────────────────────────────────────────────
+# Vertex AI SDK for Gemini Flash integration
+google-cloud-aiplatform==1.74.0
+# BigQuery for crowd analytics and historical data warehouse
+google-cloud-bigquery==3.27.0
+# Cloud Logging for structured JSON logs in Cloud Logging
 google-cloud-logging==3.11.3
+# Cloud Monitoring for custom metrics (density, latency, wait times)
+google-cloud-monitoring==2.23.0
+# Pub/Sub for event-driven architecture (crowd events, alerts, evacuations)
+google-cloud-pubsub==2.27.1
+# Secret Manager for secure secret loading at startup
+google-cloud-secret-manager==2.21.1
+# Cloud Storage for snapshot archival and heatmap tile caching
+google-cloud-storage==2.18.2
+# Firebase RTDB for real-time data persistence
+firebase-admin==6.5.0
+
+# ── Testing ─────────────────────────────────────────────────────────────────
 pytest==8.3.3
 pytest-asyncio==0.24.0
+pytest-cov==5.0.0

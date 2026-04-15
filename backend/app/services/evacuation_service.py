@@ -1,20 +1,36 @@
-"""
-FlowMind AI — Emergency Evacuation Service
-Calculates optimal exit routes and gate assignments for each zone
-when an emergency evacuation is triggered.
+"""FlowMind AI — Emergency Evacuation Service.
+
+Calculates optimal exit routes and gate assignments for each stadium zone
+when an emergency evacuation is triggered.  The optimiser considers:
+
+    * **Proximity** — zones are assigned to their nearest gates first.
+    * **Gate throughput** — higher-capacity gates absorb more evacuees.
+    * **Current congestion** — already-busy gates are penalised.
+    * **Load balancing** — cumulative gate load is tracked to spread
+      evacuees across all available exits.
+
+The algorithm processes zones in descending crowd-count order so that
+the most-packed zones get priority access to the best gates.
 """
 
 import uuid
-from typing import Dict, List
+from typing import Any, Dict, List
 
-from app.data.firebase_client import db
 from app.data.mock_generator import generate_snapshot, ZONES, FACILITIES
+from app.exceptions import EvacuationError
 from app.utils.helpers import now_iso
 
-# ── Gate-to-Zone Proximity Map ──────────────────────────────────────────────
-# Defines the closest gates for each zone, ordered by proximity.
+__all__ = [
+    "trigger_evacuation",
+    "cancel_evacuation",
+    "get_evacuation_status",
+]
 
-ZONE_EXIT_MAP = {
+# ── Gate-to-Zone Proximity Map ──────────────────────────────────────────────
+# Each zone lists its exit gates in order of physical proximity.
+# The first gate in the list is the closest; the last is the farthest.
+
+ZONE_EXIT_MAP: Dict[str, List[str]] = {
     "north_stand":  ["gate_north", "gate_main", "gate_vip"],
     "south_stand":  ["gate_south", "gate_main"],
     "east_stand":   ["gate_north", "gate_south", "gate_main"],
@@ -25,8 +41,8 @@ ZONE_EXIT_MAP = {
     "vip_lounge":   ["gate_vip", "gate_north"],
 }
 
-# Gate capacities (people per minute throughput)
-GATE_THROUGHPUT = {
+# Gate capacities — people per minute throughput
+GATE_THROUGHPUT: Dict[str, int] = {
     "gate_main":  250,
     "gate_north": 180,
     "gate_south": 180,
@@ -34,70 +50,97 @@ GATE_THROUGHPUT = {
 }
 
 # ── Evacuation State ────────────────────────────────────────────────────────
+# Module-level mutable state.  In a production system this would be
+# backed by a distributed store; here it's adequate for single-instance
+# Cloud Run deployments.
 
-_evac_state = {
+_evac_state: Dict[str, Any] = {
     "active": False,
     "plan": None,
     "triggered_at": None,
 }
 
 
-def trigger_evacuation() -> Dict:
+def trigger_evacuation() -> Dict[str, Any]:
+    """Calculate and activate an optimal evacuation plan.
+
+    The algorithm:
+        1. Snapshot current stadium data.
+        2. Sort zones by crowd count (highest first = highest priority).
+        3. For each zone, score candidate gates using a composite metric
+           of (load / throughput) + proximity penalty + current wait.
+        4. Assign the zone to the lowest-scoring (best) gate.
+        5. Accumulate gate load so subsequent zones see updated scores.
+
+    Returns:
+        The full evacuation plan dict with zone assignments, gate
+        summary, and general instructions.
+
+    Raises:
+        EvacuationError: If snapshot data is unavailable or incomplete.
+
+    Complexity:
+        Time:  O(Z · G) where Z = zones, G = gates per zone (≤ 3).
+        Space: O(Z + G) for the plan dicts.
     """
-    Calculate and return an optimal evacuation plan.
-    Assigns each zone to the best available gate based on:
-    - Proximity (closest gate first)
-    - Current gate congestion
-    - Gate throughput capacity
-    - Zone crowd count
-    """
-    snapshot = generate_snapshot()
-    zones_data = snapshot["zones"]
-    facilities_data = snapshot["facilities"]
+    try:
+        snapshot: Dict[str, Any] = generate_snapshot()
+    except Exception as exc:
+        raise EvacuationError(
+            "Cannot generate evacuation plan: snapshot unavailable.",
+            details={"original_error": str(exc)},
+        ) from exc
 
-    # Track how many people are assigned to each gate
-    gate_load = {gid: 0 for gid in GATE_THROUGHPUT}
+    zones_data: Dict[str, Dict] = snapshot["zones"]
+    facilities_data: Dict[str, Dict] = snapshot["facilities"]
 
-    zone_plans = []
+    # Track cumulative people assigned to each gate (for load-balancing)
+    gate_load: Dict[str, int] = {gid: 0 for gid in GATE_THROUGHPUT}
 
-    # Sort zones by crowd count (most crowded first = highest priority)
-    sorted_zones = sorted(
+    zone_plans: List[Dict[str, Any]] = []
+
+    # Process zones in descending crowd-count order so the busiest
+    # zones get first pick of the least-loaded gates
+    sorted_zones: List[Dict] = sorted(
         zones_data.values(),
         key=lambda z: z["current_count"],
         reverse=True,
     )
 
     for zone in sorted_zones:
-        zid = zone["zone_id"]
-        count = zone["current_count"]
-        possible_gates = ZONE_EXIT_MAP.get(zid, ["gate_main"])
+        zid: str = zone["zone_id"]
+        count: int = zone["current_count"]
+        possible_gates: List[str] = ZONE_EXIT_MAP.get(zid, ["gate_main"])
 
-        # Score each gate: lower = better
-        gate_scores = []
+        # Score each candidate gate — lower score = better assignment
+        gate_scores: List[tuple] = []
         for gid in possible_gates:
-            throughput = GATE_THROUGHPUT.get(gid, 100)
-            current_load = gate_load[gid]
-            current_wait = facilities_data.get(gid, {}).get("current_wait_minutes", 5)
+            throughput: int = GATE_THROUGHPUT.get(gid, 100)
+            current_load: int = gate_load[gid]
+            current_wait: float = facilities_data.get(gid, {}).get("current_wait_minutes", 5)
 
-            # Score = (existing load / throughput) + proximity_penalty + current_wait
-            proximity_idx = possible_gates.index(gid)
-            score = (current_load / throughput) + (proximity_idx * 0.3) + (current_wait * 0.1)
+            # Composite score:
+            #   - (load / throughput): penalises already-loaded gates
+            #   - proximity_idx * 0.3: penalises farther gates
+            #   - current_wait * 0.1: penalises congested gates
+            proximity_idx: int = possible_gates.index(gid)
+            score: float = (current_load / throughput) + (proximity_idx * 0.3) + (current_wait * 0.1)
             gate_scores.append((gid, score, throughput))
 
-        # Assign to lowest-score gate
+        # Assign to the gate with the lowest composite score
         gate_scores.sort(key=lambda x: x[1])
-        assigned_gate_id = gate_scores[0][0]
-        assigned_throughput = gate_scores[0][2]
+        assigned_gate_id: str = gate_scores[0][0]
+        assigned_throughput: int = gate_scores[0][2]
 
         gate_load[assigned_gate_id] += count
 
-        # Calculate estimated evacuation time
-        total_at_gate = gate_load[assigned_gate_id]
-        evac_time_minutes = round(total_at_gate / assigned_throughput, 1)
+        # Estimated evacuation time = total people at gate / throughput
+        total_at_gate: int = gate_load[assigned_gate_id]
+        evac_time_minutes: float = round(total_at_gate / assigned_throughput, 1)
 
-        # Get gate name
-        gate_info = facilities_data.get(assigned_gate_id, {})
-        gate_name = gate_info.get("name", assigned_gate_id.replace("_", " ").title())
+        # Resolve gate display name
+        gate_info: Dict = facilities_data.get(assigned_gate_id, {})
+        gate_name: str = gate_info.get("name", assigned_gate_id.replace("_", " ").title())
 
         zone_plans.append({
             "zone_id": zid,
@@ -110,28 +153,29 @@ def trigger_evacuation() -> Dict:
             "instructions": _build_instructions(zone["name"], gate_name, evac_time_minutes),
         })
 
-    # Sort plans by zone name for consistent display
+    # Sort zone plans alphabetically for consistent UI display
     zone_plans.sort(key=lambda z: z["zone_name"])
 
-    # Gate summary
-    gate_summary = []
+    # Gate summary — shows how the evacuee load is distributed
+    gate_summary: List[Dict[str, Any]] = []
     for gid, load in gate_load.items():
         gate_info = facilities_data.get(gid, {})
-        throughput = GATE_THROUGHPUT[gid]
+        throughput: int = GATE_THROUGHPUT[gid]
         gate_summary.append({
             "gate_id": gid,
             "gate_name": gate_info.get("name", gid.replace("_", " ").title()),
             "assigned_people": load,
             "throughput_per_min": throughput,
             "estimated_clear_time_min": round(load / throughput, 1) if load > 0 else 0,
-            "load_pct": round((load / throughput) * 10, 1),  # relative load indicator
+            "load_pct": round((load / throughput) * 10, 1),
         })
 
-    total_people = sum(z["current_count"] for z in zones_data.values())
-    total_throughput = sum(GATE_THROUGHPUT.values())
-    overall_evac_time = round(total_people / total_throughput, 1)
+    # Overall stats
+    total_people: int = sum(z["current_count"] for z in zones_data.values())
+    total_throughput: int = sum(GATE_THROUGHPUT.values())
+    overall_evac_time: float = round(total_people / total_throughput, 1)
 
-    plan = {
+    plan: Dict[str, Any] = {
         "evacuation_id": str(uuid.uuid4())[:8],
         "active": True,
         "triggered_at": now_iso(),
@@ -149,29 +193,65 @@ def trigger_evacuation() -> Dict:
         ],
     }
 
+    # Persist evacuation state
     _evac_state["active"] = True
     _evac_state["plan"] = plan
     _evac_state["triggered_at"] = now_iso()
 
+    # Publish evacuation plan to Pub/Sub for downstream emergency systems
+    # (mobile push via FCM, digital signage activation, emergency services)
+    try:
+        from app.services.pubsub_service import publish_evacuation_event
+        publish_evacuation_event(plan)
+    except Exception:
+        pass  # Pub/Sub is best-effort; evacuation proceeds regardless
+
     return plan
 
 
-def cancel_evacuation() -> Dict:
-    """Cancel an active evacuation."""
+def cancel_evacuation() -> Dict[str, Any]:
+    """Cancel an active evacuation and reset state.
+
+    Returns:
+        A confirmation dict with ``active=False`` and a timestamp.
+    """
     _evac_state["active"] = False
     _evac_state["plan"] = None
     return {"active": False, "message": "Evacuation cancelled.", "timestamp": now_iso()}
 
 
-def get_evacuation_status() -> Dict:
-    """Get current evacuation status."""
+def get_evacuation_status() -> Dict[str, Any]:
+    """Get the current evacuation status.
+
+    Returns:
+        The active evacuation plan if one exists, otherwise a dict
+        with ``active=False``.
+    """
     if _evac_state["active"] and _evac_state["plan"]:
         return _evac_state["plan"]
     return {"active": False, "message": "No active evacuation.", "timestamp": now_iso()}
 
 
+# ── Private Helpers ─────────────────────────────────────────────────────────
+
+
 def _build_instructions(zone_name: str, gate_name: str, evac_time: float) -> str:
-    """Build human-readable evacuation instruction for a zone."""
+    """Build a human-readable evacuation instruction for a zone.
+
+    The urgency level is determined by the estimated evacuation time:
+        * < 5 min  → "Proceed calmly"
+        * 5–10 min → "Move promptly"
+        * > 10 min → "Evacuate immediately"
+
+    Args:
+        zone_name: Human-readable zone name (e.g. ``"North Stand"``).
+        gate_name: Human-readable gate name (e.g. ``"North Gate"``).
+        evac_time: Estimated evacuation time in minutes.
+
+    Returns:
+        A single-sentence instruction string.
+    """
+    urgency: str
     if evac_time < 5:
         urgency = "Proceed calmly"
     elif evac_time < 10:

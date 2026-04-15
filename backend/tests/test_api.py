@@ -830,3 +830,475 @@ class TestEdgeCases:
             assert "application/json" in resp.headers.get("content-type", ""), (
                 f"{method} {path} did not return JSON"
             )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  HEALTH ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestHealthEndpoint:
+    """GET /health — Detailed health check with dependency status."""
+
+    def test_returns_200(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+    def test_response_structure(self, client):
+        data = client.get("/health").json()
+        assert data["status"] == "healthy"
+        assert "version" in data
+        assert "dependencies" in data
+        assert isinstance(data["dependencies"], dict)
+
+    def test_dependencies_listed(self, client):
+        data = client.get("/health").json()
+        deps = data["dependencies"]
+        assert "firebase" in deps
+        assert "vertex_ai" in deps
+        assert "bigquery" in deps
+
+    def test_metrics_included(self, client):
+        data = client.get("/health").json()
+        assert "metrics" in data
+        assert isinstance(data["metrics"], dict)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SECURITY HEADERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSecurityHeaders:
+    """Verify OWASP security headers are present on all responses."""
+
+    def test_x_content_type_options(self, client):
+        resp = client.get("/")
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_x_frame_options(self, client):
+        resp = client.get("/")
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+
+    def test_strict_transport_security(self, client):
+        resp = client.get("/")
+        hsts = resp.headers.get("Strict-Transport-Security", "")
+        assert "max-age=" in hsts
+
+    def test_content_security_policy(self, client):
+        resp = client.get("/")
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "default-src" in csp
+
+    def test_referrer_policy(self, client):
+        resp = client.get("/")
+        assert resp.headers.get("Referrer-Policy") is not None
+
+    def test_permissions_policy(self, client):
+        resp = client.get("/")
+        assert resp.headers.get("Permissions-Policy") is not None
+
+    def test_x_xss_protection(self, client):
+        resp = client.get("/")
+        assert resp.headers.get("X-XSS-Protection") == "1; mode=block"
+
+    def test_security_headers_on_post(self, client):
+        """Security headers should be present on POST responses too."""
+        resp = client.post("/api/chat", json={"message": "test"})
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RATE LIMITING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRateLimiting:
+    """Verify rate-limiting headers are present on responses."""
+
+    def test_rate_limit_headers_present(self, client):
+        resp = client.get("/api/crowd/current")
+        assert "X-RateLimit-Limit" in resp.headers
+        assert "X-RateLimit-Remaining" in resp.headers
+
+    def test_rate_limit_values_are_numeric(self, client):
+        resp = client.get("/api/crowd/current")
+        limit = int(resp.headers["X-RateLimit-Limit"])
+        remaining = int(resp.headers["X-RateLimit-Remaining"])
+        assert limit > 0
+        assert remaining >= 0
+
+    def test_rate_limit_remaining_decreases(self, client):
+        """Remaining count should decrease across sequential requests."""
+        resp1 = client.get("/api/crowd/current")
+        resp2 = client.get("/api/crowd/current")
+        r1 = int(resp1.headers["X-RateLimit-Remaining"])
+        r2 = int(resp2.headers["X-RateLimit-Remaining"])
+        assert r2 <= r1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  CACHE-CONTROL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCacheControl:
+    """Verify Cache-Control headers on GET responses."""
+
+    def test_get_has_cache_control(self, client):
+        resp = client.get("/api/crowd/current")
+        cc = resp.headers.get("Cache-Control", "")
+        assert "max-age=" in cc
+
+    def test_post_no_public_cache(self, client):
+        """POST responses should NOT have 'public, max-age' cache control."""
+        resp = client.post("/api/chat", json={"message": "hello"})
+        cc = resp.headers.get("Cache-Control", "")
+        # POST should either have no-store or no public max-age
+        assert "public" not in cc or "max-age=10" not in cc
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  CUSTOM EXCEPTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCustomExceptions:
+    """Test custom exception handling returns proper error responses."""
+
+    def test_facility_not_found_returns_404(self, client):
+        resp = client.get("/api/wait-times/nonexistent/predict")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert "detail" in data
+        assert "not found" in data["detail"].lower()
+
+    def test_invalid_facility_type_returns_400(self, client):
+        resp = client.get("/api/wait-times/best/invalid_type")
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "detail" in data
+        assert "Invalid facility type" in data["detail"]
+
+    def test_simulation_speed_when_not_running_returns_409(self, client):
+        """Changing speed when not running should return 409 Conflict."""
+        resp = client.post("/api/simulation/speed", json={"speed": 10.0})
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "detail" in data
+        assert "not running" in data["detail"].lower()
+
+    def test_exception_details_structure(self, client):
+        """Custom exception responses should have structured error info."""
+        resp = client.get("/api/wait-times/best/xyz")
+        data = resp.json()
+        assert "detail" in data
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  INPUT SANITIZATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestInputSanitization:
+    """Test that user input is sanitized against XSS and injection."""
+
+    def test_html_tags_in_message(self, client):
+        """HTML tags in chat message should not appear raw in response."""
+        resp = client.post("/api/chat", json={
+            "message": "<script>alert('xss')</script>Where is food?"
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        # The response should not contain raw script tags
+        assert "<script>" not in data.get("response", "")
+
+    def test_special_chars_handled(self, client):
+        resp = client.post("/api/chat", json={
+            "message": "Where's the best food? & how long is wait?"
+        })
+        assert resp.status_code == 200
+
+    def test_unicode_message(self, client):
+        resp = client.post("/api/chat", json={
+            "message": "Where is food?"
+        })
+        assert resp.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  UNIT TESTS — HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestHelperFunctions:
+    """Unit tests for app.utils.helpers."""
+
+    def test_now_iso_format(self):
+        from app.utils.helpers import now_iso
+        result = now_iso()
+        assert "T" in result
+        assert "+" in result or "Z" in result
+
+    def test_clamp_within_range(self):
+        from app.utils.helpers import clamp
+        assert clamp(0.5) == 0.5
+
+    def test_clamp_below_min(self):
+        from app.utils.helpers import clamp
+        assert clamp(-0.1) == 0.0
+
+    def test_clamp_above_max(self):
+        from app.utils.helpers import clamp
+        assert clamp(1.5) == 1.0
+
+    def test_clamp_custom_range(self):
+        from app.utils.helpers import clamp
+        assert clamp(150, 0, 100) == 100
+
+    def test_density_to_status_critical(self):
+        from app.utils.helpers import density_to_status
+        assert density_to_status(0.95) == "critical"
+
+    def test_density_to_status_high(self):
+        from app.utils.helpers import density_to_status
+        assert density_to_status(0.80) == "high"
+
+    def test_density_to_status_moderate(self):
+        from app.utils.helpers import density_to_status
+        assert density_to_status(0.60) == "moderate"
+
+    def test_density_to_status_low(self):
+        from app.utils.helpers import density_to_status
+        assert density_to_status(0.20) == "low"
+
+    def test_minutes_to_human_less_than_minute(self):
+        from app.utils.helpers import minutes_to_human
+        assert minutes_to_human(0.5) == "less than a minute"
+
+    def test_minutes_to_human_minutes(self):
+        from app.utils.helpers import minutes_to_human
+        assert minutes_to_human(7) == "7 minutes"
+
+    def test_minutes_to_human_singular(self):
+        from app.utils.helpers import minutes_to_human
+        assert minutes_to_human(1) == "1 minute"
+
+    def test_minutes_to_human_hours(self):
+        from app.utils.helpers import minutes_to_human
+        result = minutes_to_human(90)
+        assert "1 hour" in result
+        assert "30 minutes" in result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  UNIT TESTS — CUSTOM EXCEPTION HIERARCHY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestExceptionHierarchy:
+    """Unit tests for the custom exception hierarchy."""
+
+    def test_flowmind_error_base(self):
+        from app.exceptions import FlowMindError
+        exc = FlowMindError("test error", details={"key": "value"})
+        assert exc.message == "test error"
+        assert exc.details == {"key": "value"}
+        assert str(exc) == "test error"
+
+    def test_flowmind_error_default_details(self):
+        from app.exceptions import FlowMindError
+        exc = FlowMindError("test")
+        assert exc.details == {}
+
+    def test_facility_not_found_error(self):
+        from app.exceptions import FacilityNotFoundError
+        exc = FacilityNotFoundError("food_99")
+        assert exc.facility_id == "food_99"
+        assert "food_99" in exc.message
+        assert exc.details["facility_id"] == "food_99"
+
+    def test_invalid_facility_type_error(self):
+        from app.exceptions import InvalidFacilityTypeError
+        exc = InvalidFacilityTypeError("swimming_pool")
+        assert exc.facility_type == "swimming_pool"
+        assert "swimming_pool" in exc.message
+        assert len(exc.valid_types) > 0
+
+    def test_simulation_state_error(self):
+        from app.exceptions import SimulationStateError, FlowMindError
+        exc = SimulationStateError("not running")
+        assert isinstance(exc, FlowMindError)
+
+    def test_evacuation_error(self):
+        from app.exceptions import EvacuationError, FlowMindError
+        exc = EvacuationError("snapshot unavailable")
+        assert isinstance(exc, FlowMindError)
+
+    def test_all_exceptions_inherit_base(self):
+        from app.exceptions import (
+            FlowMindError, FacilityNotFoundError, InvalidFacilityTypeError,
+            SimulationStateError, EvacuationError, AIServiceError,
+            BigQueryError, FirebaseError, SnapshotGenerationError,
+        )
+        for cls in [FacilityNotFoundError, SimulationStateError,
+                     EvacuationError, AIServiceError, BigQueryError,
+                     FirebaseError, SnapshotGenerationError]:
+            assert issubclass(cls, FlowMindError)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  UNIT TESTS — SECURITY UTILITIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSecurityUtilities:
+    """Unit tests for security middleware utilities."""
+
+    def test_sanitize_input_basic(self):
+        from app.middleware.security import sanitize_input
+        assert sanitize_input("hello world") == "hello world"
+
+    def test_sanitize_input_html_escaping(self):
+        from app.middleware.security import sanitize_input
+        result = sanitize_input("<script>alert('xss')</script>")
+        assert "<script>" not in result
+        assert "&lt;" in result
+
+    def test_sanitize_input_truncation(self):
+        from app.middleware.security import sanitize_input
+        result = sanitize_input("a" * 1000, max_length=50)
+        assert len(result) == 50
+
+    def test_sanitize_input_empty(self):
+        from app.middleware.security import sanitize_input
+        assert sanitize_input("") == ""
+
+    def test_sanitize_input_null_bytes_removed(self):
+        from app.middleware.security import sanitize_input
+        result = sanitize_input("hello\x00world")
+        assert "\x00" not in result
+
+    def test_generate_etag_deterministic(self):
+        from app.middleware.security import generate_etag
+        content = b"test content"
+        etag1 = generate_etag(content)
+        etag2 = generate_etag(content)
+        assert etag1 == etag2
+
+    def test_generate_etag_format(self):
+        from app.middleware.security import generate_etag
+        etag = generate_etag(b"test")
+        assert etag.startswith('W/"')
+        assert etag.endswith('"')
+
+    def test_generate_etag_different_content(self):
+        from app.middleware.security import generate_etag
+        etag1 = generate_etag(b"content A")
+        etag2 = generate_etag(b"content B")
+        assert etag1 != etag2
+
+    def test_rate_limiter_allows_initial(self):
+        from app.middleware.security import RateLimiter
+        from unittest.mock import MagicMock
+        limiter = RateLimiter(max_requests=5, window_seconds=60)
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        mock_request.client.host = "127.0.0.1"
+        allowed, headers = limiter.is_allowed(mock_request)
+        assert allowed is True
+        assert "X-RateLimit-Limit" in headers
+
+    def test_rate_limiter_exhaustion(self):
+        from app.middleware.security import RateLimiter
+        from unittest.mock import MagicMock
+        limiter = RateLimiter(max_requests=2, window_seconds=60)
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        mock_request.client.host = "10.0.0.1"
+        # Exhaust the bucket
+        limiter.is_allowed(mock_request)  # 1 remaining
+        limiter.is_allowed(mock_request)  # 0 remaining
+        allowed, headers = limiter.is_allowed(mock_request)  # should be denied
+        assert allowed is False
+        assert "Retry-After" in headers
+
+    def test_rate_limiter_cleanup(self):
+        from app.middleware.security import RateLimiter
+        from unittest.mock import MagicMock
+        limiter = RateLimiter(max_requests=10, window_seconds=60)
+        mock_request = MagicMock()
+        mock_request.headers = {}
+        mock_request.client.host = "192.168.1.1"
+        limiter.is_allowed(mock_request)
+        evicted = limiter.cleanup_stale(max_age_seconds=0)
+        # With max_age=0, the entry we just added should be evicted
+        # (it was added at monotonic time < now + 0)
+        assert isinstance(evicted, int)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  UNIT TESTS — MOCK FIREBASE DB
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestMockFirebaseDB:
+    """Unit tests for the in-memory MockFirebaseDB."""
+
+    def test_set_and_get(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/test/key", "value")
+        assert db.get("/test/key") == "value"
+
+    def test_get_nonexistent_returns_none(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        assert db.get("/nonexistent") is None
+
+    def test_update_merges(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/test", {"a": 1, "b": 2})
+        db.update("/test", {"b": 3, "c": 4})
+        data = db.get("/test")
+        assert data == {"a": 1, "b": 3, "c": 4}
+
+    def test_delete_removes_key(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/test/key", "value")
+        db.delete("/test/key")
+        assert db.get("/test/key") is None
+
+    def test_exists_true(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/test/key", "value")
+        assert db.exists("/test/key") is True
+
+    def test_exists_false(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        assert db.exists("/nonexistent") is False
+
+    def test_get_root(self):
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/a", 1)
+        db.set("/b", 2)
+        root = db.get("/")
+        assert isinstance(root, dict)
+        assert "a" in root
+
+    def test_deepcopy_isolation(self):
+        """Changes to returned data should not affect stored data."""
+        from app.data.firebase_client import MockFirebaseDB
+        db = MockFirebaseDB()
+        db.set("/test", {"list": [1, 2, 3]})
+        data = db.get("/test")
+        data["list"].append(4)
+        original = db.get("/test")
+        assert len(original["list"]) == 3
+

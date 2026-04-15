@@ -10,7 +10,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev)
-[![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-AI-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
+[![Gemini](https://img.shields.io/badge/Vertex_AI-Gemini_2.5_Flash-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://cloud.google.com/vertex-ai)
 [![Firebase](https://img.shields.io/badge/Firebase-RTDB-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
 [![GCP](https://img.shields.io/badge/Google_Cloud-Run-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
 [![Tests](https://img.shields.io/badge/Tests-123_passing-22c55e?style=for-the-badge&logo=pytest&logoColor=white)](./backend/tests)
@@ -86,10 +86,11 @@ graph TB
     end
 
     subgraph "Google Services"
-        GM["Gemini 2.5 Flash"]
+        GM["Vertex AI — Gemini 2.5 Flash"]
         MAPS["Google Maps JS API\n+ HeatmapLayer"]
         RTDB["Firebase Realtime DB"]
         LOG["Google Cloud Logging"]
+        BQ["BigQuery Analytics"]
     end
 
     Frontend -->|"HTTP JSON"| Backend
@@ -105,6 +106,7 @@ graph TB
     AS --> MG
     GS --> MG
     MG --> FB
+    MG -->|"crowd_events"| BQ
     FB <-->|"Snapshots at /snapshots"| RTDB
     GS --> GM
     GS -.->|"Fallback"| AS
@@ -124,7 +126,7 @@ sequenceDiagram
     participant Log as Cloud Logging
     participant Gen as Mock Generator
     participant DB as Firebase RTDB
-    participant AI as Gemini 2.5 Flash
+    participant AI as Vertex AI — Gemini
 
     Note over Gen,DB: Background: Refreshes every 30s
     Gen->>Gen: Calculate phase multiplier
@@ -201,7 +203,8 @@ flowmind-ai/
 │   │   │   ├── crowd_service.py          # Linear extrapolation predictions
 │   │   │   ├── wait_service.py           # Facility ranking + best pick
 │   │   │   ├── alert_service.py          # Threshold-based alert engine
-│   │   │   ├── gemini_service.py         # Gemini AI + rule-based fallback
+│   │   │   ├── gemini_service.py         # Vertex AI Gemini + rule-based fallback
+│   │   │   ├── bigquery_service.py       # BigQuery crowd event analytics
 │   │   │   ├── simulation_service.py     # Event timeline controller
 │   │   │   └── evacuation_service.py     # Optimal gate routing algorithm
 │   │   │
@@ -311,8 +314,9 @@ flowmind-ai/
 - Rapid surge detection triggers alert on >15% density jump
 - `role="feed"` with `aria-live="polite"` for real-time screen reader updates
 
-### 5. AI Assistant (Gemini 2.5 Flash)
+### 5. AI Assistant (Vertex AI — Gemini 2.5 Flash)
 - Decision-focused responses with **live stadium context** injected
+- Powered by **Vertex AI SDK** (`google-cloud-aiplatform`) with ADC authentication
 - **10 languages**: English, Hindi, Spanish, French, German, Portuguese, Arabic, Japanese, Chinese, Korean
 - Quick-action buttons for the most common questions
 - Works without API key via intelligent **rule-based fallback**
@@ -342,7 +346,14 @@ flowmind-ai/
 - Falls back to thread-safe **in-memory MockFirebaseDB** when `FIREBASE_DATABASE_URL` is not set
 - Same `db.get/set/update/delete` interface — downstream code unchanged
 
-### 10. WCAG 2.1 AA Accessibility
+### 10. BigQuery Crowd Analytics
+- Every crowd snapshot logged to a **`flowmind_analytics.crowd_events`** table
+- One row per zone per snapshot — zone density, count, status, phase multiplier
+- Day-partitioned by `timestamp` for efficient queries
+- Table auto-created on first write (no manual schema setup)
+- Falls back to **local logging** when BigQuery credentials are unavailable
+
+### 11. WCAG 2.1 AA Accessibility
 - **Skip navigation link** (visible on keyboard focus)
 - All dynamic data regions use `aria-live="polite"` or `aria-live="assertive"`
 - **Keyboard navigation**: arrow keys for sidebar tabs and filter tabs
@@ -477,10 +488,11 @@ Open **http://localhost:5173** in your browser.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEMINI_API_KEY` | *(empty)* | From [AI Studio](https://aistudio.google.com/apikey) — fallback used if empty |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model identifier |
+| `VERTEX_AI_LOCATION` | `us-central1` | Vertex AI region |
 | `FIREBASE_DATABASE_URL` | *(empty)* | Firebase RTDB URL — in-memory mock used if empty |
-| `GOOGLE_CLOUD_PROJECT` | *(empty)* | GCP project ID for Cloud Logging |
+| `GOOGLE_CLOUD_PROJECT` | *(empty)* | GCP project ID for Cloud Logging, Vertex AI, BigQuery |
+| `BIGQUERY_DATASET` | `flowmind_analytics` | BigQuery dataset for crowd event logging |
 | `GOOGLE_MAPS_API_KEY` | *(empty)* | Stored here for reference; used by frontend |
 | `CORS_ORIGINS` | `localhost:5173,3000` | Comma-separated allowed frontend origins |
 | `STADIUM_NAME` | `MetaStadium Arena` | Stadium display name |
@@ -552,6 +564,33 @@ python -m pytest tests/test_api.py -v
 3. On Cloud Run: logs appear automatically in **Logs Explorer**
 4. Locally: falls back to standard `logging.basicConfig()`
 
+### BigQuery Analytics
+1. Enable **BigQuery API** in your GCP project
+2. Set `GOOGLE_CLOUD_PROJECT` and optionally `BIGQUERY_DATASET` in `backend/.env`
+3. The `flowmind_analytics.crowd_events` table is **auto-created** on first write
+4. On Cloud Run: ADC handles auth — no service account JSON needed
+5. Query crowd trends in the **BigQuery Console** or via `bigquery_service.query_crowd_history()`
+
+### Cloud Functions Trigger
+
+You can trigger a Cloud Function whenever a new crowd snapshot is logged to BigQuery using a **BigQuery subscription** or **Eventarc trigger**:
+
+```bash
+# Deploy a Cloud Function triggered by BigQuery inserts via Eventarc
+gcloud functions deploy crowd-event-handler \
+  --gen2 \
+  --runtime=python312 \
+  --region=us-central1 \
+  --trigger-event-filters="type=google.cloud.bigquery.v2.TableDataChange" \
+  --trigger-event-filters="dataset=flowmind_analytics" \
+  --trigger-event-filters="table=crowd_events" \
+  --source=./cloud_functions/crowd_handler \
+  --entry-point=handle_crowd_event
+```
+
+> **Tip:** Use this to trigger downstream actions like sending push notifications
+> when density exceeds a threshold, or to feed data into a Vertex AI training pipeline.
+
 ---
 
 ## Stadium Layout
@@ -602,9 +641,10 @@ npm run build
 |-------|-----------|---------|
 | Backend | FastAPI 0.115 | Async Python, auto OpenAPI docs |
 | Frontend | React 19 + Vite 8 | Fast HMR, modern JSX |
-| AI | Gemini 2.5 Flash | Crowd intelligence assistant |
+| AI | Vertex AI — Gemini 2.5 Flash | Crowd intelligence assistant |
 | Maps | Google Maps JS API | Live heatmap visualization |
 | Database | Firebase Realtime DB | Crowd snapshot persistence |
+| Analytics | Google BigQuery | Crowd event logging & trend analysis |
 | Logging | Google Cloud Logging | Structured request telemetry |
 | Styling | Vanilla CSS | Full control, zero framework overhead |
 | State | React hooks + polling | Simple, no Redux complexity |

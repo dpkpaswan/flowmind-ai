@@ -1,19 +1,28 @@
-"""
-FlowMind AI — Gemini AI Service
-Integrates Google Gemini Flash for decision-based stadium assistance.
-The AI receives live stadium context with every query, making responses
+"""FlowMind AI — Gemini AI Service.
+
+Integrates Google Gemini Flash via the Vertex AI SDK for decision-based
+stadium assistance.  The AI receives live stadium context (zone densities,
+facility wait times, active alerts) with every query, making responses
 specific and actionable rather than generic chatbot replies.
+
+When Vertex AI is unavailable (no GCP project configured, no credentials,
+or an API error), the service transparently falls back to a rule-based
+response engine that pattern-matches on keywords.
 """
 
 import json
-from typing import Dict, Optional
-
-import google.generativeai as genai
+import logging
+from typing import Any, Dict, List, Optional
 
 from app.config import settings
 from app.data.mock_generator import generate_snapshot
 from app.services.alert_service import generate_alerts
 from app.utils.helpers import now_iso
+
+__all__ = [
+    "ask_assistant",
+    "LANGUAGE_NAMES",
+]
 
 
 # ── System Prompt ────────────────────────────────────────────────────────────
@@ -39,7 +48,7 @@ ACTIVE ALERTS:
 {alerts_context}
 """
 
-LANGUAGE_NAMES = {
+LANGUAGE_NAMES: Dict[str, str] = {
     "en": "English", "hi": "Hindi", "es": "Spanish", "fr": "French",
     "de": "German", "pt": "Portuguese", "ar": "Arabic",
     "ja": "Japanese", "zh": "Chinese", "ko": "Korean",
@@ -48,29 +57,66 @@ LANGUAGE_NAMES = {
 
 # ── Service ──────────────────────────────────────────────────────────────────
 
+logger = logging.getLogger("flowmind.gemini")
+
 _model = None
+_vertex_initialized = False
 
 
 def _get_model():
-    """Lazy-initialize the Gemini model."""
-    global _model
-    if _model is None:
-        if not settings.GEMINI_API_KEY:
-            return None
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _model = genai.GenerativeModel(
+    """
+    Lazy-initialize the Gemini model via Vertex AI SDK.
+    Uses Application Default Credentials (ADC) — no API key required on GCP.
+    Set GOOGLE_CLOUD_PROJECT and (optionally) VERTEX_AI_LOCATION in .env.
+    """
+    global _model, _vertex_initialized
+    if _model is not None:
+        return _model
+
+    project = settings.GOOGLE_CLOUD_PROJECT
+    if not project:
+        logger.info("GOOGLE_CLOUD_PROJECT not set -> using rule-based fallback.")
+        return None
+
+    try:
+        import vertexai
+        from vertexai.generative_models import GenerativeModel, GenerationConfig
+
+        if not _vertex_initialized:
+            vertexai.init(
+                project=project,
+                location=settings.VERTEX_AI_LOCATION,
+            )
+            _vertex_initialized = True
+
+        _model = GenerativeModel(
             model_name=settings.GEMINI_MODEL,
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "max_output_tokens": 500,
-            },
+            generation_config=GenerationConfig(
+                temperature=0.7,
+                top_p=0.9,
+                max_output_tokens=500,
+            ),
         )
-    return _model
+        logger.info("Vertex AI Gemini model initialized (%s).", settings.GEMINI_MODEL)
+        return _model
+    except Exception as exc:
+        logger.warning(
+            "Vertex AI unavailable (%s: %s) -> using rule-based fallback.",
+            type(exc).__name__, exc,
+        )
+        return None
 
 
 def _build_context() -> tuple:
-    """Build live stadium context string for the system prompt."""
+    """Build live stadium context strings for the system prompt.
+
+    Fetches the current snapshot and active alerts, then formats them
+    into human-readable multi-line strings suitable for injection into
+    the Gemini system prompt.
+
+    Returns:
+        A ``(stadium_context, alerts_context)`` tuple of strings.
+    """
     snapshot = generate_snapshot()
     alerts = generate_alerts()
 
@@ -103,7 +149,7 @@ def _build_context() -> tuple:
     # Format alerts
     if alerts:
         alert_lines = [
-            f"- [{a['severity'].upper()}] {a['title']}: {a['message']} → Action: {a['action']}"
+            f"- [{a['severity'].upper()}] {a['title']}: {a['message']} -> Action: {a['action']}"
             for a in alerts[:5]  # Top 5 alerts
         ]
         alerts_context = "\n".join(alert_lines)
@@ -113,11 +159,26 @@ def _build_context() -> tuple:
     return stadium_context, alerts_context
 
 
-async def ask_assistant(user_message: str, user_location: Optional[str] = None, language: str = "en") -> Dict:
-    """
-    Send a user query to Gemini with full stadium context.
-    Returns a structured response with the AI answer and metadata.
-    Supports multi-language responses via the language parameter.
+async def ask_assistant(
+    user_message: str,
+    user_location: Optional[str] = None,
+    language: str = "en",
+) -> Dict[str, Any]:
+    """Send a user query to Gemini with full stadium context.
+
+    The function injects live zone densities, facility wait times, and
+    active alerts into the system prompt so the AI can give data-driven
+    advice.  If Vertex AI is unavailable or errors out, the rule-based
+    fallback is used transparently.
+
+    Args:
+        user_message: The fan's question (1–500 characters).
+        user_location: Optional zone ID/name for location-aware answers.
+        language: ISO 639-1 language code (default ``"en"``).
+
+    Returns:
+        A dict with keys ``response``, ``recommended_action``,
+        ``confidence``, ``related_zones``, and ``timestamp``.
     """
     model = _get_model()
 
@@ -144,7 +205,8 @@ async def ask_assistant(user_message: str, user_location: Optional[str] = None, 
         chat = model.start_chat(history=[])
         # Send system context as the first message
         response = await chat.send_message_async(
-            f"{system}\n\nUser question: {user_msg}"
+            f"{system}\n\nUser question: {user_msg}",
+            stream=False,
         )
 
         response_text = response.text.strip()
@@ -171,8 +233,25 @@ async def ask_assistant(user_message: str, user_location: Optional[str] = None, 
         return _fallback_response(user_message, user_location, language)
 
 
-def _fallback_response(user_message: str, user_location: Optional[str] = None, language: str = "en") -> Dict:
-    """Rule-based fallback when Gemini API key is not configured."""
+def _fallback_response(
+    user_message: str,
+    user_location: Optional[str] = None,
+    language: str = "en",
+) -> Dict[str, Any]:
+    """Generate a rule-based response when Vertex AI is unavailable.
+
+    Pattern-matches on keywords in the user message to provide
+    data-driven answers about crowds, food, restrooms, exits, and
+    navigation.  Unmatched queries receive a general stadium summary.
+
+    Args:
+        user_message: The fan's question.
+        user_location: Optional current zone (unused in fallback).
+        language: Response language code (unused in fallback — English only).
+
+    Returns:
+        A response dict with ``confidence=0.7`` (lower than Gemini's 0.85).
+    """
     snapshot = generate_snapshot()
     zones = snapshot["zones"]
     facilities = snapshot["facilities"]
@@ -247,7 +326,12 @@ def _fallback_response(user_message: str, user_location: Optional[str] = None, l
 
 
 def _quick_summary() -> str:
-    """Generate a quick stadium summary."""
+    """Generate a one-line stadium summary for unmatched queries.
+
+    Returns:
+        A string like *"The stadium is at 68 % overall capacity (40,800 fans).
+        Quietest zone: VIP Lounge (30 %)."*
+    """
     snapshot = generate_snapshot()
     overview = snapshot["overview"]
     zones = snapshot["zones"]
@@ -263,7 +347,18 @@ def _quick_summary() -> str:
 
 
 def _extract_action(response_text: str) -> Optional[str]:
-    """Try to extract a key action from the AI response."""
+    """Extract the first actionable sentence from an AI response.
+
+    Scans sentences for action-oriented keywords ("head to", "avoid",
+    "leave", etc.) and returns the first match.
+
+    Args:
+        response_text: The full AI response string.
+
+    Returns:
+        The first actionable sentence (with trailing period), or
+        ``None`` if no action keywords are found.
+    """
     action_keywords = ["head to", "go to", "avoid", "leave", "try", "recommend", "suggest"]
     sentences = response_text.split(".")
     for sentence in sentences:
